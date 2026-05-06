@@ -1,0 +1,6 @@
+.idea/
+.venv/
+__pycache__/
+.DS_Store
+Weather_App.py
+Test.py
