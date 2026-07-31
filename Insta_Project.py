@@ -114,7 +114,7 @@ class Timer(QWidget):
                     self.remaining_seconds = 10
                     display2.show()
                     display2.show_vid()
-                    display2.your_next_channel = display2.play_sound(display2.your_next, False)
+                    display2.congrats_channel = display2.play_sound(display2.congrats_sound, False)
                     was_on_instagram = False
                     return
                 else:
@@ -150,7 +150,7 @@ class Timer(QWidget):
             else:
 
                 display2.show()
-                display2.your_next_channel = display2.play_sound(display2.your_next, False)
+                display2.congrats_channel = display2.play_sound(display2.congrats_sound, False)
                 display2.show_vid()
 
 
@@ -233,7 +233,7 @@ class Display2(Display):
         QWidget.__init__(self)
         self.screen = QApplication.primaryScreen().availableGeometry()
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
-        self.your_next = pygame.mixer.Sound(os.path.join(ASSETS, "congratulations.mp3"))
+        self.congrats_sound = pygame.mixer.Sound(os.path.join(ASSETS, "congratulations.mp3"))
         self.setGeometry((self.screen.width() - self.width()) // 2, (self.screen.height() - self.height()) // 2, 700, 550)
         self.check_time = QTimer(self)
         self.image = QLabel(self)
@@ -274,7 +274,7 @@ class Display2(Display):
         self.label.raise_()
         self.player.play()
 
-def sel():
+def monitor_instagram():
     was_on_instagram = False
 
     while True:
@@ -298,7 +298,7 @@ if __name__ == "__main__":
 
     timer.start_signal.connect(timer.start_timer)
 
-    thread = threading.Thread(target=sel, daemon=True)
+    thread = threading.Thread(target=monitor_instagram, daemon=True)
     thread.start()
 
     sys.exit(app1.exec())
