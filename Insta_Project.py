@@ -6,6 +6,13 @@ import string
 import time
 import threading
 
+import objc
+from AppKit import (NSApplication,
+                    NSApplicationActivationPolicyAccessory,
+                    NSScreenSaverWindowLevel,
+                    NSWindowCollectionBehaviorCanJoinAllSpaces,
+                    NSWindowCollectionBehaviorFullScreenAuxiliary,
+                    NSWindowCollectionBehaviorStationary)
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
@@ -83,6 +90,28 @@ def chrome_window_rect():
     return QRect(left, top, right - left, bottom - top)
 
 
+def run_as_background_app():
+    """Drop the Dock icon.
+
+    Only an accessory app may draw onto another app's fullscreen Space, so without
+    this the popups stay invisible whenever Chrome is fullscreen.
+    """
+    NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+
+
+def float_above_everything(widget):
+    """Raise this window above all apps, including Spaces running fullscreen Chrome.
+
+    Has to run once the widget is on screen, so it has a native window to configure.
+    """
+    window = objc.objc_object(c_void_p=int(widget.winId())).window()
+    window.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces |
+                                  NSWindowCollectionBehaviorFullScreenAuxiliary |
+                                  NSWindowCollectionBehaviorStationary)
+    window.setLevel_(NSScreenSaverWindowLevel)
+    window.orderFrontRegardless()
+
+
 def chrome_screen_area():
     """Return the available area of the screen showing Chrome, else the primary screen."""
     rect = chrome_window_rect()
@@ -128,7 +157,9 @@ class Timer(QWidget):
 
     def start_timer(self):  # ← add this method
         self.move_to_chrome()
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.show()
+        float_above_everything(self)
         self.update_time()
 
     def check_instagram(self):
@@ -225,11 +256,13 @@ class Display(QWidget):
 
 
     def show_on_chrome(self):
-        """Centre on the screen Chrome is on, then show."""
+        """Centre on the screen Chrome is on, then show in front of everything."""
         area = chrome_screen_area()
         self.move(area.x() + (area.width() - self.width()) // 2,
                   area.y() + (area.height() - self.height()) // 2)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.show()
+        float_above_everything(self)
 
     def play_sound(self, sound, loop = False):
         return sound.play(loops = 3 if loop else 0)
@@ -329,6 +362,7 @@ def monitor_instagram():
 
 if __name__ == "__main__":
     app1 = QApplication(sys.argv)
+    run_as_background_app()
     timer = Timer()
     pygame.mixer.init()
     display = Display()
