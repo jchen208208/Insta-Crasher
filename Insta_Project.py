@@ -37,6 +37,16 @@ tell application "Google Chrome"
 end tell
 '''
 
+WINDOW_BOUNDS_SCRIPT = '''
+if application "Google Chrome" is not running then return ""
+tell application "Google Chrome"
+    if (count of windows) is 0 then return ""
+    set b to bounds of front window
+    return ((item 1 of b) as string) & "," & ((item 2 of b) as string) & "," & ¬
+           ((item 3 of b) as string) & "," & ((item 4 of b) as string)
+end tell
+'''
+
 was_on_instagram = False
 
 
@@ -61,13 +71,30 @@ def close_instagram_tabs():
     osascript(CLOSE_TABS_SCRIPT)
 
 
+def chrome_window_rect():
+    """Return the front Chrome window as a QRect, or None if Chrome has no window."""
+    out = osascript(WINDOW_BOUNDS_SCRIPT).strip()
+    if not out:
+        return None
+    try:
+        left, top, right, bottom = (int(value) for value in out.split(","))
+    except ValueError:
+        return None
+    return QRect(left, top, right - left, bottom - top)
+
+
+def chrome_screen_area():
+    """Return the available area of the screen showing Chrome, else the primary screen."""
+    rect = chrome_window_rect()
+    screen = QApplication.screenAt(rect.center()) if rect else None
+    return (screen or QApplication.primaryScreen()).availableGeometry()
+
+
 class Timer(QWidget):
     start_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.setGeometry(screen.width(), screen.top(), 200, 50)
         self.setFixedSize(300, 100)
         self.timeLabel = QLabel(self)
         self.timer = QTimer(self)
@@ -94,7 +121,13 @@ class Timer(QWidget):
 
         self.timer.timeout.connect(self.update_time)
 
+    def move_to_chrome(self):
+        """Sit in the top right corner of the Chrome window being used."""
+        rect = chrome_window_rect() or chrome_screen_area()
+        self.move(rect.right() - self.width() - 10, rect.top() + 10)
+
     def start_timer(self):  # ← add this method
+        self.move_to_chrome()
         self.show()
         self.update_time()
 
@@ -112,7 +145,7 @@ class Timer(QWidget):
                     self.timer.stop()
                     self.hide()
                     self.remaining_seconds = 10
-                    display2.show()
+                    display2.show_on_chrome()
                     display2.show_vid()
                     display2.congrats_channel = display2.play_sound(display2.congrats_sound, False)
                     was_on_instagram = False
@@ -142,14 +175,14 @@ class Timer(QWidget):
 
                 close_instagram_tabs()
 
-                display.show()
+                display.show_on_chrome()
                 display.play_sound(display.freddy_sound)
                 display.play_sound(display.static_sound)
                 display.start_typing()
 
             else:
 
-                display2.show()
+                display2.show_on_chrome()
                 display2.congrats_channel = display2.play_sound(display2.congrats_sound, False)
                 display2.show_vid()
 
@@ -157,8 +190,7 @@ class Timer(QWidget):
 class Display(QWidget):
     def __init__(self):
         super().__init__()
-        self.screen = QApplication.primaryScreen().availableGeometry()
-        self.setGeometry((self.screen.width() - self.width()) // 2, (self.screen.height() - self.height()) // 2, 700, 550)
+        self.resize(700, 550)
         self.freddy_sound = pygame.mixer.Sound(os.path.join(ASSETS, "[Nightmare Freddy]Stop ......live..mp3"))
         self.static_sound = pygame.mixer.Sound(os.path.join(ASSETS, "Static.mp3"))
         self.check_time = QTimer(self)
@@ -191,6 +223,13 @@ class Display(QWidget):
         self.image.show()
         self.image.lower()
 
+
+    def show_on_chrome(self):
+        """Centre on the screen Chrome is on, then show."""
+        area = chrome_screen_area()
+        self.move(area.x() + (area.width() - self.width()) // 2,
+                  area.y() + (area.height() - self.height()) // 2)
+        self.show()
 
     def play_sound(self, sound, loop = False):
         return sound.play(loops = 3 if loop else 0)
@@ -231,10 +270,9 @@ class Display(QWidget):
 class Display2(Display):
     def __init__(self):
         QWidget.__init__(self)
-        self.screen = QApplication.primaryScreen().availableGeometry()
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
         self.congrats_sound = pygame.mixer.Sound(os.path.join(ASSETS, "congratulations.mp3"))
-        self.setGeometry((self.screen.width() - self.width()) // 2, (self.screen.height() - self.height()) // 2, 700, 550)
+        self.resize(700, 550)
         self.check_time = QTimer(self)
         self.image = QLabel(self)
         self.video = QVideoWidget(self)
