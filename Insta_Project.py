@@ -1,22 +1,65 @@
+import os
+import subprocess
 import sys
 import pygame
 import string
 import time
 import threading
-import requests
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 
-driver = None
+ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Insta_Proiect")
+
+READ_TABS_SCRIPT = '''
+if application "Google Chrome" is not running then return ""
+tell application "Google Chrome"
+    if (count of windows) is 0 then return ""
+    set out to (URL of active tab of front window)
+    repeat with w in windows
+        repeat with t in tabs of w
+            set out to out & linefeed & (URL of t)
+        end repeat
+    end repeat
+    return out
+end tell
+'''
+
+CLOSE_TABS_SCRIPT = '''
+if application "Google Chrome" is not running then return ""
+tell application "Google Chrome"
+    repeat with w in windows
+        close (tabs of w whose URL contains "instagram.com")
+    end repeat
+end tell
+'''
+
 was_on_instagram = False
+
+
+def osascript(script):
+    try:
+        result = subprocess.run(["osascript", "-e", script],
+                                capture_output=True, text=True, timeout=5)
+        return result.stdout
+    except Exception:
+        return ""
+
+
+def chrome_instagram_state():
+    """Return (Instagram is the active tab, Instagram is open in any tab)."""
+    lines = osascript(READ_TABS_SCRIPT).strip().splitlines()
+    if not lines:
+        return False, False
+    return "instagram.com" in lines[0], any("instagram.com" in url for url in lines[1:])
+
+
+def close_instagram_tabs():
+    osascript(CLOSE_TABS_SCRIPT)
+
 
 class Timer(QWidget):
     start_signal = pyqtSignal()
@@ -44,7 +87,7 @@ class Timer(QWidget):
         self.timeLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.timeLabel.setStyleSheet("background-color: black;"
                                      "color: white;")
-        font_id = QFontDatabase.addApplicationFont("/Users/botboy/Downloads/DS-DIGIT.TTF")
+        font_id = QFontDatabase.addApplicationFont(os.path.join(ASSETS, "DS-DIGIT.TTF"))
         font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
         self.timeLabel.setFont(QFont(font_family, 100))
         self.setStyleSheet("background-color: black;")
@@ -56,31 +99,9 @@ class Timer(QWidget):
         self.update_time()
 
     def check_instagram(self):
-        try:
-            response = requests.get("http://localhost:9222/json")
-            tabs = response.json()
-            page_tabs = [tab for tab in tabs if tab.get("type") == "page"]
-            
-            on_instagram = False
-            insta_exists = False
-            
-            for tab in tabs:
-                if "instagram.com" in tab.get("url", ""):
-                    insta_exists = True
-                    break
-            
-            if page_tabs:
-                active_url = page_tabs[0].get("url", "")
-                if "instagram.com" in active_url:
-                    on_instagram = True
-            
-            return on_instagram, insta_exists
-
-        except Exception:
-            return False, False
+        return chrome_instagram_state()
 
     def update_time(self):
-        global driver
         global was_on_instagram
 
         if self.remaining_seconds >= 0:
@@ -119,18 +140,7 @@ class Timer(QWidget):
 
             if on_instagram:
 
-                try:
-                    response = requests.get("http://localhost:9222/json")
-                    tabs = response.json()
-
-                    for tab in tabs:
-                        if "instagram.com" in tab.get("url", ""):
-                            driver.switch_to.window(tab["id"])
-                            driver.close()
-                            break
-
-                except Exception as e:
-                    print(f"Error closing tab: {e}")
+                close_instagram_tabs()
 
                 display.show()
                 display.play_sound(display.freddy_sound)
@@ -149,8 +159,8 @@ class Display(QWidget):
         super().__init__()
         self.screen = QApplication.primaryScreen().availableGeometry()
         self.setGeometry((self.screen.width() - self.width()) // 2, (self.screen.height() - self.height()) // 2, 700, 550)
-        self.freddy_sound = pygame.mixer.Sound("/Users/botboy/PyCharmMiscProject/Insta_Proiect/[Nightmare Freddy]Stop ......live..mp3")
-        self.static_sound = pygame.mixer.Sound("/Users/botboy/PyCharmMiscProject/Insta_Proiect/Static.mp3")
+        self.freddy_sound = pygame.mixer.Sound(os.path.join(ASSETS, "[Nightmare Freddy]Stop ......live..mp3"))
+        self.static_sound = pygame.mixer.Sound(os.path.join(ASSETS, "Static.mp3"))
         self.check_time = QTimer(self)
         self.label = QLabel("")
         self.label.setGeometry(0, 0, 100, 50)
@@ -168,14 +178,14 @@ class Display(QWidget):
     def initUI(self):
         self.setWindowTitle("Boo!")
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
-        font_id = QFontDatabase.addApplicationFont("/Users/botboy/Downloads/HorrorFont-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont(os.path.join(ASSETS, "HorrorFont-Regular.ttf"))
         font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
         self.label.setFont(QFont(font_family, 300))
         self.label.setStyleSheet("font-size: 50px; color: red;")
         self.label.setWordWrap(True)
         self.image.setGeometry(0, 0, 0, 0)
         self.image.setFixedSize(700, 550)
-        image_map = QPixmap("/Users/botboy/PyCharmMiscProject/Insta_Proiect/Nightmareattack.webp")
+        image_map = QPixmap(os.path.join(ASSETS, "Nightmareattack.webp"))
         self.image.setPixmap(image_map)
         self.image.setScaledContents(True)
         self.image.show()
@@ -223,7 +233,7 @@ class Display2(Display):
         QWidget.__init__(self)
         self.screen = QApplication.primaryScreen().availableGeometry()
         self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
-        self.your_next = pygame.mixer.Sound("/Users/botboy/PyCharmMiscProject/Insta_Proiect/congratulations.mp3")
+        self.your_next = pygame.mixer.Sound(os.path.join(ASSETS, "congratulations.mp3"))
         self.setGeometry((self.screen.width() - self.width()) // 2, (self.screen.height() - self.height()) // 2, 700, 550)
         self.check_time = QTimer(self)
         self.image = QLabel(self)
@@ -235,7 +245,7 @@ class Display2(Display):
         self.audio = QAudioOutput()
         self.player.setAudioOutput(self.audio)
         self.player.setVideoOutput(self.video)
-        self.player.setSource(QUrl.fromLocalFile("/Users/botboy/PyCharmMiscProject/Insta_Proiect/Congrats.mp4"))
+        self.player.setSource(QUrl.fromLocalFile(os.path.join(ASSETS, "Congrats.mp4")))
         self.label = QLabel("Congratulations", self)
         self.label.setGeometry(0, 0, 700, 100)
 
@@ -244,14 +254,14 @@ class Display2(Display):
 
     def initUI(self):
         self.setWindowTitle("Congratulations!")
-        font_id = QFontDatabase.addApplicationFont("/Users/botboy/Downloads/HorrorFont-Regular.ttf")
+        font_id = QFontDatabase.addApplicationFont(os.path.join(ASSETS, "HorrorFont-Regular.ttf"))
         font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
         self.label.setFont(QFont(font_family, 30))
         self.label.setStyleSheet("font-size: 30px; color: red;")
         self.label.setWordWrap(True)
         self.image.setGeometry(0, 0, 0, 0)
         self.image.setFixedSize(700, 550)
-        image_map = QPixmap("/Users/botboy/PyCharmMiscProject/Insta_Proiect/might.jpeg")
+        image_map = QPixmap(os.path.join(ASSETS, "might.jpeg"))
         self.image.setPixmap(image_map)
         self.image.setScaledContents(True)
         self.image.hide()
@@ -265,33 +275,17 @@ class Display2(Display):
         self.player.play()
 
 def sel():
-    global driver
-    options = Options()
-    options.debugger_address = "localhost:9222"
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
     was_on_instagram = False
 
     while True:
-        try:
-            response = requests.get("http://localhost:9222/json")
-            tabs = response.json()
-            page_tabs = [tab for tab in tabs if tab.get("type") == "page"]
-            
-            on_instagram = False
-            if page_tabs:
-                active_url = page_tabs[0].get("url", "")
-                if "instagram.com" in active_url:
-                    on_instagram = True
-            
-            if on_instagram and not was_on_instagram:
-                timer.start_signal.emit()
-                was_on_instagram = True
-            elif not on_instagram:
-                was_on_instagram = False
-                
-        except Exception:
-            pass
+        on_instagram, _ = chrome_instagram_state()
+
+        if on_instagram and not was_on_instagram:
+            timer.start_signal.emit()
+            was_on_instagram = True
+        elif not on_instagram:
+            was_on_instagram = False
+
         time.sleep(2)
 
 
